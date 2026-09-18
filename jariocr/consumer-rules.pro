@@ -1,0 +1,3 @@
+-keep class com.google.mlkit.** { *; }
+-keep class id.co.jari.ocr.** { *; }
+-dontwarn com.google.mlkit.**

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="id.co.jari.ocr.StnkAccuracyTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-18T03:22:06.790Z" hostname="192.168.1.2" time="0.085">
+  <properties/>
+  <testcase name="clear full stnk fills every field and scores above 80%" classname="id.co.jari.ocr.StnkAccuracyTest" time="0.064"/>
+  <testcase name="stnk with expected values lands each field in its own slot and passes all checks" classname="id.co.jari.ocr.StnkAccuracyTest" time="0.015"/>
+  <testcase name="polri stnk does not mistake owner nik for frame number" classname="id.co.jari.ocr.StnkAccuracyTest" time="0.005"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

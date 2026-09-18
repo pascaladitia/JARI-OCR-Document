@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="id.co.jari.ocr.StnkOcrParserTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-09-18T03:22:06.900Z" hostname="192.168.1.2" time="0.081">
+  <properties/>
+  <testcase name="parses off-grid label value pairs via spatial anchor" classname="id.co.jari.ocr.StnkOcrParserTest" time="0.019"/>
+  <testcase name="noisy polri capture ignores header garbage and finds the real plate" classname="id.co.jari.ocr.StnkOcrParserTest" time="0.012"/>
+  <testcase name="scrambled ocr line order still fills front table fields using their spatial values" classname="id.co.jari.ocr.StnkOcrParserTest" time="0.017"/>
+  <testcase name="splits two-line address and normalizes RT RW" classname="id.co.jari.ocr.StnkOcrParserTest" time="0.01"/>
+  <testcase name="extracts labelless plate that appears alone on a line" classname="id.co.jari.ocr.StnkOcrParserTest" time="0.001"/>
+  <testcase name="VIN with letter O is corrected to zero" classname="id.co.jari.ocr.StnkOcrParserTest" time="0.001"/>
+  <testcase name="separate merk and typo typed rows fill from the right column" classname="id.co.jari.ocr.StnkOcrParserTest" time="0.002"/>
+  <testcase name="merged merk type and jenis model header rows with combined inline values fill all fields" classname="id.co.jari.ocr.StnkOcrParserTest" time="0.009"/>
+  <testcase name="missing fields remain null" classname="id.co.jari.ocr.StnkOcrParserTest" time="0.001"/>
+  <testcase name="extracts plate when label has OCR typo and suffix is merged with next column" classname="id.co.jari.ocr.StnkOcrParserTest" time="0.006"/>
+  <testcase name="parses plate with spaces" classname="id.co.jari.ocr.StnkOcrParserTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

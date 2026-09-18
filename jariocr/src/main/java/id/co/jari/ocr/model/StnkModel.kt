@@ -1,0 +1,31 @@
+package id.co.jari.ocr.model
+
+data class StnkModel(
+    val nrkb: String = "",
+    val namaPemilik: String = "",
+    val alamatJalan: String? = null,
+    val rt: String? = null,
+    val rw: String? = null,
+    val kelDesa: String? = null,
+    val kota: String? = null,
+    val alamatLengkap: String? = null,
+    val merek: String? = null,
+    val tipe: String? = null,
+    val tipeDagang: String? = null,
+    val jenis: String? = null,
+    val model: String? = null,
+    val tahunPembuatan: String? = null,
+    val isiSilinder: String? = null,
+    val nomorRangka: String? = null,
+    val nomorMesin: String? = null,
+    val warna: String? = null,
+    val bahanBakar: String? = null,
+    val warnaTnkb: String? = null,
+    val tahunRegistrasi: String? = null,
+    val nomorBpkb: String? = null,
+    val nomorPendaftaran: String? = null,
+    val berlakuSampai: String? = null,
+    val confidenceScore: Float = 0f,
+    val confidenceTier: ConfidenceTier = ConfidenceTier.LOW,
+    val scanMeta: OcrScanMeta? = null
+)
