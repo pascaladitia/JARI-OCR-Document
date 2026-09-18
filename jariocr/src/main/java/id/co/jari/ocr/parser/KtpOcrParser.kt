@@ -172,39 +172,81 @@ object KtpOcrParser {
 
     private fun extractNik(lines: List<OcrLine>): String {
         val slot = NIK_SLOT
+
         val index = ParserSupport.findLabelLineIndex(
-            lines, slot.strict, slot.tokens, used = emptySet()
+            lines,
+            slot.strict,
+            slot.tokens,
+            used = emptySet()
         )
+
         if (index >= 0) {
-            val value = fieldValue(lines, index, slot.strict, slot.tokens)
+            val value = fieldValue(
+                lines,
+                index,
+                slot.strict,
+                slot.tokens
+            )
+
             if (!value.isNullOrBlank()) {
                 val digits = OcrTypoDictionary.toStrictNumeric(value)
-                if (digits.length == 16 && digits.all { it.isDigit() }) return digits
-                val first16 = digits.take(16)
-                if (first16.length == 16 && isPlausibleNik(first16)) return first16
+
+                if (digits.length == 16 && digits.all { it.isDigit() }) {
+                    return digits
+                }
+
+                if (digits.length >= 4 && digits.all { it.isDigit() }) {
+                    return digits
+                }
             }
         }
 
         for (line in lines) {
-            val tokens = line.safeText.split(Regex("""[^\p{L}\p{N}]+"""))
+            val tokens = line.safeText.split(
+                Regex("""[^\p{L}\p{N}]+""")
+            )
+
             for (token in tokens) {
                 if (token.isBlank()) continue
+
                 val digits = OcrTypoDictionary.toStrictNumeric(token)
-                if (digits.length == 16 && digits.all { it.isDigit() }) return digits
+
+                if (digits.length == 16 && digits.all { it.isDigit() }) {
+                    return digits
+                }
+
+                if (digits.length >= 4 && digits.all { it.isDigit() }) {
+                    return digits
+                }
             }
         }
 
         for (line in lines) {
             val joined = StringBuilder()
+
             for (token in line.safeText.split(Regex("""\s+"""))) {
-                if (token.any { it.isDigit() }) joined.append(OcrTypoDictionary.toStrictNumeric(token))
+                if (token.any { it.isDigit() }) {
+                    joined.append(
+                        OcrTypoDictionary.toStrictNumeric(token)
+                    )
+                }
             }
+
             val digits = joined.toString()
-            if (digits.length >= 16) {
-                val candidate = digits.take(16)
-                if (candidate.all { it.isDigit() } && isPlausibleNik(candidate)) return candidate
+
+            if (digits.length >= 4) {
+                if (digits.length >= 16) {
+                    val candidate = digits.take(16)
+
+                    if (candidate.all { it.isDigit() }) {
+                        return candidate
+                    }
+                }
+
+                return digits
             }
         }
+
         return ""
     }
 
