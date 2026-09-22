@@ -14,6 +14,7 @@ import id.co.jari.ocr.model.OcrResult
 import id.co.jari.ocr.model.OcrScanMeta
 import id.co.jari.ocr.parser.KtpOcrParser
 import id.co.jari.ocr.parser.StnkOcrParser
+import id.co.jari.ocr.util.BitmapUtils
 import id.co.jari.ocr.util.OcrPreprocessor
 import id.co.jari.ocr.util.YuvToRgb
 import kotlinx.coroutines.Dispatchers
@@ -31,7 +32,7 @@ class OcrProcessingPipeline(context: Context) {
             )
         }
         val quality = ImageQualityAnalyzer.analyze(bitmap)
-        processText(documentType, quality, 0L) {
+        processText(documentType, quality, bitmap) {
             recognizeBetter(bitmap)
         }
     }
@@ -42,11 +43,14 @@ class OcrProcessingPipeline(context: Context) {
         documentType: DocumentType,
         quality: ImageQuality
     ): OcrResult = withContext(Dispatchers.Default) {
-        processText(documentType, quality, 0L) {
-            val frame = YuvToRgb.toBitmap(image, rotationDegrees, MAX_OCR_WIDTH)
-            if (frame.width < 64 || frame.height < 64) {
-                throw IllegalArgumentException("Citra terlalu kecil untuk OCR")
-            }
+        val frame = YuvToRgb.toBitmap(image, rotationDegrees, MAX_OCR_WIDTH)
+        if (frame.width < 64 || frame.height < 64) {
+            return@withContext OcrResult.Failure(
+                OcrError.INVALID_INPUT,
+                "Citra terlalu kecil untuk OCR"
+            )
+        }
+        processText(documentType, quality, frame) {
             recognizeBetter(frame)
         }
     }
@@ -66,7 +70,7 @@ class OcrProcessingPipeline(context: Context) {
     private suspend fun processText(
         documentType: DocumentType,
         quality: ImageQuality,
-        _elapsedHintMs: Long,
+        source: Bitmap?,
         recognize: suspend () -> com.google.mlkit.vision.text.Text
     ): OcrResult {
         val startedAtNanos = System.nanoTime()
@@ -84,7 +88,38 @@ class OcrProcessingPipeline(context: Context) {
         if (!extracted.hasText) {
             return OcrResult.Failure(OcrError.NO_TEXT_FOUND, "Tidak ada teks yang terdeteksi dari dokumen.")
         }
-        return buildResult(extracted, documentType, quality, elapsedMs)
+        val result = buildResult(extracted, documentType, quality, elapsedMs)
+        return repairKtpNik(result, source, quality) ?: result
+    }
+
+    private suspend fun repairKtpNik(
+        result: OcrResult,
+        source: Bitmap?,
+        quality: ImageQuality
+    ): OcrResult? {
+        if (source == null) return null
+        if (quality.laplacianVariance < REPAIR_MIN_SHARPNESS) return null
+        val ktp = when (result) {
+            is OcrResult.Ktp -> result.data
+            else -> return null
+        }
+        if (ktp.isValidNik) return null
+
+        val upscaled = runCatching {
+            BitmapUtils.upscale(source, REPAIR_UPSCALE_FACTOR, REPAIR_UPSCALE_MAX_DIM)
+        }.getOrNull() ?: return null
+        if (upscaled === source) return null
+
+        val startedAtNanos = System.nanoTime()
+        val repairText = runCatching { recognizeBetter(upscaled) }.getOrNull() ?: return null
+        val repairElapsedMs = (System.nanoTime() - startedAtNanos) / 1_000_000
+
+        val extracted = ExtractedTextMapper.map(repairText)
+        if (!extracted.hasText) return null
+        if (!KtpOcrParser.parse(extracted).isValidNik) return null
+
+        val totalElapsedMs = (ktp.scanMeta?.elapsedMs ?: 0L) + repairElapsedMs
+        return buildResult(extracted, DocumentType.KTP, quality, totalElapsedMs)
     }
 
     private fun buildResult(
@@ -147,5 +182,8 @@ class OcrProcessingPipeline(context: Context) {
     private companion object {
         const val MAX_OCR_WIDTH = 1600
         const val ENHANCE_TRIGGER = 0.6f
+        const val REPAIR_UPSCALE_FACTOR = 2f
+        const val REPAIR_UPSCALE_MAX_DIM = 4000
+        const val REPAIR_MIN_SHARPNESS = 6f
     }
 }
