@@ -15,17 +15,53 @@ object OcrTypoDictionary {
         put('g', '9'); put('q', '9')
     }
 
+    fun digitOf(c: Char): Char? =
+        letterToDigit[c] ?: c.takeIf { it.isDigit() }
+
+    fun isNumericToken(raw: String): Boolean =
+        raw.isNotEmpty() && raw.all { digitOf(it) != null }
+
     fun toStrictNumeric(raw: String): String {
         val sb = StringBuilder(raw.length)
         for (c in raw) {
-            val digit = letterToDigit[c]
+            val digit = digitOf(c)
             if (digit != null) {
                 sb.append(digit)
-            } else if (c.isDigit()) {
-                sb.append(c)
             }
         }
         return sb.toString()
+    }
+
+    fun toNumericPreservingGaps(raw: String): String {
+        val sb = StringBuilder(raw.length)
+        var i = 0
+        while (i < raw.length) {
+            val c = raw[i]
+            val digit = digitOf(c)
+            if (digit != null) {
+                sb.append(digit)
+                i++
+                continue
+            }
+            if (c.isLetter()) {
+                i++
+                continue
+            }
+            when {
+                sb.isEmpty() || sb.last().isWhitespace() -> i++
+                c.isWhitespace() -> {
+                    while (i < raw.length && raw[i].isWhitespace()) {
+                        sb.append(raw[i])
+                        i++
+                    }
+                }
+                else -> {
+                    sb.append(' ')
+                    i++
+                }
+            }
+        }
+        return sb.toString().trimEnd()
     }
 
     fun toStrictNumericOrNull(raw: String, expectedLength: Int = -1): String? {

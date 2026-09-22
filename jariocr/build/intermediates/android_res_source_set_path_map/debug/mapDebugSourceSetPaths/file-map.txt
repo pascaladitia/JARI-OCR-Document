@@ -1,9 +1,0 @@
-id.co.jari.ocr.jariocr-pngs-0 /Users/macbookm1pro/AndroidStudioProjects/OCRDocument/jariocr/build/generated/res/pngs/debug
-id.co.jari.ocr.jariocr-updated_navigation_xml-1 /Users/macbookm1pro/AndroidStudioProjects/OCRDocument/jariocr/build/generated/updated_navigation_xml/debug
-id.co.jari.ocr.jariocr-mergeDebugResources-2 /Users/macbookm1pro/AndroidStudioProjects/OCRDocument/jariocr/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
-id.co.jari.ocr.jariocr-mergeDebugResources-3 /Users/macbookm1pro/AndroidStudioProjects/OCRDocument/jariocr/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
-id.co.jari.ocr.jariocr-debug-4 /Users/macbookm1pro/AndroidStudioProjects/OCRDocument/jariocr/build/intermediates/merged_res/debug/mergeDebugResources
-id.co.jari.ocr.jariocr-debug-5 /Users/macbookm1pro/AndroidStudioProjects/OCRDocument/jariocr/build/intermediates/packaged_res/debug/packageDebugResources
-id.co.jari.ocr.jariocr-debug-6 /Users/macbookm1pro/AndroidStudioProjects/OCRDocument/jariocr/src/debug/res
-id.co.jari.ocr.jariocr-main-7 /Users/macbookm1pro/AndroidStudioProjects/OCRDocument/jariocr/src/main/res
-gradleHome-0 /Users/macbookm1pro/.gradle
