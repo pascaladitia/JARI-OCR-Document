@@ -189,16 +189,14 @@ object KtpOcrParser {
             )
 
             if (!value.isNullOrBlank()) {
-                val digits = OcrTypoDictionary.toStrictNumeric(value)
-
-                if (digits.length == 16 && digits.all { it.isDigit() }) {
-                    return digits
-                }
-
-                if (digits.length >= 4 && digits.all { it.isDigit() }) {
-                    return digits
-                }
+                val candidate = nikCandidate(value)
+                if (candidate != null) return candidate
             }
+        }
+
+        for (line in lines) {
+            val candidate = nikCandidateFromLine(line.safeText)
+            if (candidate != null) return candidate
         }
 
         for (line in lines) {
@@ -250,9 +248,32 @@ object KtpOcrParser {
         return ""
     }
 
-    private fun isPlausibleNik(candidate: String): Boolean {
-        val province = candidate.substring(0, 2).toIntOrNull() ?: return false
-        return province in 11..36
+    private fun nikCandidate(value: String): String? {
+        val digits = OcrTypoDictionary.toStrictNumeric(value)
+        if (digits.isEmpty()) return null
+        if (digits.length == 16) return digits
+        if (digits.length in 4 until 16) {
+            val spaced = OcrTypoDictionary.toNumericPreservingGaps(value)
+            return spaced.takeIf { it.isNotBlank() }
+        }
+        return null
+    }
+
+    private fun nikCandidateFromLine(lineText: String): String? {
+        val sb = StringBuilder()
+        var pendingGap = false
+        for (token in lineText.split(Regex("""\s+"""))) {
+            if (!OcrTypoDictionary.isNumericToken(token)) continue
+            if (sb.isNotEmpty() && pendingGap) sb.append(' ')
+            sb.append(OcrTypoDictionary.toStrictNumeric(token))
+            pendingGap = true
+        }
+        if (sb.isEmpty()) return null
+        val spaced = sb.toString()
+        val collapsed = spaced.replace(" ", "")
+        if (collapsed.length == 16 && collapsed.all { it.isDigit() }) return collapsed
+        if (collapsed.length in 4 until 16 && spaced != collapsed) return spaced
+        return null
     }
 
     private fun extractBirth(lines: List<OcrLine>, value: String?): Pair<String?, String?> {

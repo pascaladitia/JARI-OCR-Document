@@ -86,6 +86,43 @@ class KtpOcrParserTest {
     }
 
     @Test
+    fun `NIK with unreadable middle digits keeps gap visible`() {
+        val text = TestFixtures.text(
+            TestFixtures.line("NIK : 3202 3434"),
+            TestFixtures.line("Nama : BUDI")
+        )
+        val ktp = KtpOcrParser.parse(text)
+
+        assertEquals("3202 3434", ktp.nik)
+        assertEquals(false, ktp.isValidNik)
+    }
+
+    @Test
+    fun `NIK double space gap preserves two unreadable middle digits`() {
+        val text = TestFixtures.text(
+            TestFixtures.line("NIK"),
+            TestFixtures.line("3202  3434"),
+            TestFixtures.line("Nama : BUDI")
+        )
+        val ktp = KtpOcrParser.parse(text)
+
+        assertEquals("3202 3434", ktp.nik)
+        assertEquals(false, ktp.isValidNik)
+    }
+
+    @Test
+    fun `NIK with grouping spaces still returns 16 digits`() {
+        val text = TestFixtures.text(
+            TestFixtures.line("NIK : 3171 0108 1288 0011"),
+            TestFixtures.line("Nama : BUDI")
+        )
+        val ktp = KtpOcrParser.parse(text)
+
+        assertEquals("3171010812880011", ktp.nik)
+        assertTrue(ktp.isValidNik)
+    }
+
+    @Test
     fun `parses label and value on separate lines`() {
         val text = TestFixtures.text(
             TestFixtures.line("NIK"),
