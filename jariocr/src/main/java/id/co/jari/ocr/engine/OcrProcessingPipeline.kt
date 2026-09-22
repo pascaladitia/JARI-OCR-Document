@@ -89,21 +89,33 @@ class OcrProcessingPipeline(context: Context) {
             return OcrResult.Failure(OcrError.NO_TEXT_FOUND, "Tidak ada teks yang terdeteksi dari dokumen.")
         }
         val result = buildResult(extracted, documentType, quality, elapsedMs)
-        return repairKtpNik(result, source, quality) ?: result
+        return repairByUpscale(result, source, quality) ?: result
     }
 
-    private suspend fun repairKtpNik(
+    private suspend fun repairByUpscale(
         result: OcrResult,
         source: Bitmap?,
         quality: ImageQuality
     ): OcrResult? {
         if (source == null) return null
         if (quality.laplacianVariance < REPAIR_MIN_SHARPNESS) return null
-        val ktp = when (result) {
-            is OcrResult.Ktp -> result.data
+
+        val parsedDocumentType: DocumentType = when (result) {
+            is OcrResult.Ktp -> DocumentType.KTP
+            is OcrResult.Stnk -> DocumentType.STNK
+            is OcrResult.Failure -> return null
+        }
+        val initialFormat = when (result) {
+            is OcrResult.Ktp -> ConfidenceCalculator.ktpFormatConfidence(result.data)
+            is OcrResult.Stnk -> ConfidenceCalculator.stnkFormatConfidence(result.data)
             else -> return null
         }
-        if (ktp.isValidNik) return null
+        val needsRepair = when (result) {
+            is OcrResult.Ktp -> !result.data.isValidNik
+            is OcrResult.Stnk -> initialFormat < 1.0f
+            else -> false
+        }
+        if (!needsRepair) return null
 
         val upscaled = runCatching {
             BitmapUtils.upscale(source, REPAIR_UPSCALE_FACTOR, REPAIR_UPSCALE_MAX_DIM)
@@ -116,10 +128,30 @@ class OcrProcessingPipeline(context: Context) {
 
         val extracted = ExtractedTextMapper.map(repairText)
         if (!extracted.hasText) return null
-        if (!KtpOcrParser.parse(extracted).isValidNik) return null
+        if (!repairImproves(extracted, parsedDocumentType, initialFormat)) return null
 
-        val totalElapsedMs = (ktp.scanMeta?.elapsedMs ?: 0L) + repairElapsedMs
-        return buildResult(extracted, DocumentType.KTP, quality, totalElapsedMs)
+        val previousElapsedMs = when (result) {
+            is OcrResult.Ktp -> result.data.scanMeta?.elapsedMs
+            is OcrResult.Stnk -> result.data.scanMeta?.elapsedMs
+            else -> null
+        } ?: 0L
+        return buildResult(
+            extracted,
+            parsedDocumentType,
+            quality,
+            previousElapsedMs + repairElapsedMs
+        )
+    }
+
+    private fun repairImproves(
+        extracted: ExtractedText,
+        documentType: DocumentType,
+        initialFormat: Float
+    ): Boolean = when (documentType) {
+        DocumentType.KTP -> KtpOcrParser.parse(extracted).isValidNik
+
+        DocumentType.STNK ->
+            ConfidenceCalculator.stnkFormatConfidence(StnkOcrParser.parse(extracted)) > initialFormat
     }
 
     private fun buildResult(
