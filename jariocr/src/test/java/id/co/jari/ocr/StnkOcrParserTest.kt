@@ -208,4 +208,103 @@ class StnkOcrParserTest {
         assertEquals("JB81E11234", stnk.nomorMesin)
         assertEquals("KOMP PERGUDANGAN", stnk.alamatJalan)
     }
+
+    @Test
+    fun `corrects letter O misread inside plate digits`() {
+        val text = TestFixtures.text(
+            TestFixtures.line("NOMOR REGISTRASI : B O234 ABC", TestFixtures.box(50, 10, 400, 30))
+        )
+        assertEquals("B 0234 ABC", StnkOcrParser.parse(text).nrkb)
+    }
+
+    @Test
+    fun `corrects digit misread inside plate suffix letters`() {
+        val text = TestFixtures.text(
+            TestFixtures.line("NRKB : B 1234 AB0", TestFixtures.box(50, 10, 400, 30))
+        )
+        assertEquals("B 1234 ABO", StnkOcrParser.parse(text).nrkb)
+    }
+
+    @Test
+    fun `corrects first digit misread as plate prefix letter`() {
+        val text = TestFixtures.text(
+            TestFixtures.line("NOMOR REGISTRASI / NRKB : 8 1234 ABC", TestFixtures.box(50, 10, 420, 30))
+        )
+        assertEquals("B 1234 ABC", StnkOcrParser.parse(text).nrkb)
+    }
+
+    @Test
+    fun `corrects mixed confusion in two letter prefix plates`() {
+        val text = TestFixtures.text(
+            TestFixtures.line("NOMOR REGISTRASI : DA 8O13 BS", TestFixtures.box(50, 10, 400, 30))
+        )
+        assertEquals("DA 8013 BS", StnkOcrParser.parse(text).nrkb)
+    }
+
+    @Test
+    fun `prefers whole line plate over frame number substring`() {
+        val b = TestFixtures::box
+        val text = TestFixtures.text(
+            TestFixtures.line("NOMOR REGISTRASI", b(50, 5, 180, 17)),
+            TestFixtures.line("MH1JB8118KK123456", b(200, 6, 420, 18)),
+            TestFixtures.line("B 1234 ABC", b(200, 40, 300, 52))
+        )
+        assertEquals("B 1234 ABC", StnkOcrParser.parse(text).nrkb)
+    }
+
+    @Test
+    fun `parses year misread by OCR first digit confusion`() {
+        val text = TestFixtures.text(
+            TestFixtures.line("TAHUN PEMBUATAN : Z023", TestFixtures.box(50, 10, 250, 30))
+        )
+        assertEquals("2023", StnkOcrParser.parse(text).tahunPembuatan)
+    }
+
+    @Test
+    fun `rejects impossible year extracted from misread value`() {
+        val text = TestFixtures.text(
+            TestFixtures.line("TAHUN PEMBUATAN : 8023", TestFixtures.box(50, 10, 250, 30))
+        )
+        assertNull(StnkOcrParser.parse(text).tahunPembuatan)
+    }
+
+    @Test
+    fun `keeps letter I in short frame numbers but corrects full length VIN`() {
+        val b = TestFixtures::box
+        val short = StnkOcrParser.parse(
+            TestFixtures.text(
+                TestFixtures.line("NO. RANGKA", b(50, 10, 150, 28)),
+                TestFixtures.line("JB8I1234", b(260, 28, 340, 46))
+            )
+        )
+        assertEquals("JB8I1234", short.nomorRangka)
+
+        val vin = StnkOcrParser.parse(
+            TestFixtures.text(
+                TestFixtures.line("NO. RANGKA", b(50, 10, 150, 28)),
+                TestFixtures.line("MH1JB8118KKI23456", b(260, 28, 470, 46))
+            )
+        )
+        assertEquals("MH1JB8118KK123456", vin.nomorRangka)
+    }
+
+    @Test
+    fun `dotted warna tnkb label feeds warnaTnkb not warna`() {
+        val b = TestFixtures::box
+        val text = TestFixtures.text(
+            TestFixtures.line("WARNA T.N.K.B", b(50, 340, 170, 358)),
+            TestFixtures.line("HITAM", b(260, 358, 310, 376))
+        )
+        val stnk = StnkOcrParser.parse(text)
+        assertEquals("HITAM", stnk.warnaTnkb)
+        assertNull(stnk.warna)
+    }
+
+    @Test
+    fun `fuzzy resolves OCR misspelled brand`() {
+        val text = TestFixtures.text(
+            TestFixtures.line("MEREK : SUZUKB AXELO", TestFixtures.box(50, 10, 300, 30))
+        )
+        assertEquals("SUZUKI", StnkOcrParser.parse(text).merek)
+    }
 }

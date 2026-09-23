@@ -10,21 +10,33 @@ import id.co.jari.ocr.model.StnkModel
 
 object StnkOcrParser {
 
-    private val PLATE_BODY = Regex("""([A-Z]{1,2})\s*(\d{1,4})\s*([A-Z]+)(?![A-Z0-9])""")
+    private val STRICT_PLATE = Regex("""([A-Z]{1,2})\s*(\d{1,4})\s*([A-Z]+)(?![A-Z0-9])""")
+
+    private val LOOSE_PLATE = Regex("""([A-Z0-9]{1,3})\s*([A-Z0-9]{3,5})\s*([A-Z0-9]{1,3})""")
+
+    private val DIGIT_TO_LETTER = mapOf(
+        '0' to 'O', '1' to 'I', '2' to 'Z', '5' to 'S', '6' to 'G', '8' to 'B'
+    )
+
+    private val PLATE_SHAPE = Regex("""^[A-Z]{1,2} [0-9]{1,4} [A-Z]{1,3}$""")
+
+    private val YEAR_PATTERN = Regex("""(?<!\d)([0-9OIZSBGq]{4})(?!\d)""")
 
     private val BRANDS = listOf(
         "SUZUKI", "YAMAHA", "HONDA", "KAWASAKI", "TVS", "BAJAJ", "VESPA", "BMW", "KTM",
-        "BENELLI", "TOYOTA", "DAIHATSU", "MITSUBISHI", "NISSAN", "ISUZU", "MAZDA",
+        "BENELLI", "DUCATI", "PIAGGIO", "KYMCO", "APRILIA", "ROYAL ENFIELD", "HARLEY",
+        "TRIUMPH", "TOYOTA", "DAIHATSU", "MITSUBISHI", "NISSAN", "ISUZU", "MAZDA",
         "HYUNDAI", "KIA", "CHEVROLET", "FORD", "PEUGEOT", "RENAULT", "AUDI", "MERCEDES",
-        "VOLVO", "LEXUS", "DATSUN", "WULING", "CHERY", "GWM", "MG"
-    )
+        "VOLKSWAGEN", "VOLVO", "LEXUS", "DATSUN", "WULING", "CHERY", "GWM", "MG",
+        "JAGUAR", "MINI", "SSANGYONG", "MAHINDRA", "LAND ROVER", "SKODA", "DFSK"
+    ).sortedByDescending { it.replace(" ", "").length }
 
     private val KNOWN_LABELS = listOf(
         "NOMOR REGISTRASI", "NRKB", "NAMA PEMILIK", "ALAMAT", "MEREK", "MERK",
         "TYPE", "TIPE DAGANG", "TIPE", "JENIS", "MODEL", "TAHUN PEMBUATAN",
         "ISI SILINDER", "NO. RANGKA", "NO RANGKA", "NOMOR RANGKA", "NIK/VIN", "RANGKA/VIN", "NIK", "VIN",
         "NO. MESIN", "NO MESIN", "NOMOR MESIN", "WARNA TNKB", "WARNA KB",
-        "WARNA", "BAHAN BAKAR", "BERLAKU SAMPAI", "NO. BPKB", "NO BPKB",
+        "WARNA", "BAHAN BAKAR", "BERLAKU SAMPAI", "MASA BERLAKU", "NO. BPKB", "NO BPKB",
         "NO. PENDAFTARAN", "NO PENDAFTARAN", "TH REGISTRASI", "TAHUN REGISTRASI"
     )
 
@@ -61,7 +73,7 @@ object StnkOcrParser {
             isiSilinder = anchor(lines, listOf("ISI SILINDER", "SILINDER", "DAYA LISTRIK")),
             nomorRangka = cleanRangka(anchor(lines, listOf("NO. RANGKA", "NO RANGKA", "NOMOR RANGKA", "RANGKA"))),
             nomorMesin = cleanMesin(anchor(lines, listOf("NO. MESIN", "NO MESIN", "NOMOR MESIN", "MESIN"))),
-            warna = anchor(lines, listOf("WARNA KB", "WARNA KENDARAAN", "WARNA"), exclude = listOf("TNKB")),
+            warna = anchor(lines, listOf("WARNA KB", "WARNA KENDARAAN", "WARNA"), exclude = listOf("TNKB", "T.N.K.B")),
             bahanBakar = anchor(lines, listOf("BAHAN BAKAR", "BAHAN BAKAR / BBM")),
             warnaTnkb = anchor(lines, listOf("WARNA TNKB", "WARNA T.N.K.B")),
             tahunRegistrasi = extractYear(anchor(lines, listOf("TH REGISTRASI", "TH. REGISTRASI", "TAHUN REGISTRASI"))),
@@ -104,21 +116,78 @@ object StnkOcrParser {
             }
             extractPlate(value)?.let { return it }
         }
-        for (line in lines) {
-            extractPlate(line.safeText)?.let { return it }
-        }
+        bestPlateAcrossLines(lines)?.plate?.let { return it }
         return ""
     }
 
     private fun extractPlate(source: String?): String? {
         if (source.isNullOrBlank()) return null
-        val match = PLATE_BODY.find(source.uppercase()) ?: return null
-        val letters1 = match.groupValues[1]
-        val digits = match.groupValues[2]
-        val letterRun = match.groupValues[3]
-        val suffix = if (letterRun.length <= 3) letterRun else letterRun.take(2)
-        if (letters1.isEmpty() || digits.isEmpty() || suffix.isEmpty()) return null
-        return "$letters1 $digits $suffix"
+        return extractPlateInLine(source, 0)?.plate
+    }
+
+    private data class PlateCandidate(
+        val plate: String,
+        val corrections: Int,
+        val wholeLine: Boolean,
+        val index: Int
+    )
+
+    private fun bestPlateAcrossLines(lines: List<OcrLine>): PlateCandidate? =
+        lines.mapIndexed { i, line ->
+            extractPlateInLine(line.safeText, i)
+        }.filterNotNull().minWithOrNull(
+            compareBy({ it.corrections }, { !it.wholeLine }, { it.plate.length }, { it.index })
+        )
+
+    private fun extractPlateInLine(source: String, index: Int): PlateCandidate? {
+        val upper = source.uppercase().trim()
+
+        val strict = STRICT_PLATE.find(upper)
+        if (strict != null && strict.groupValues[3].length > 3) {
+            val letters1 = strict.groupValues[1]
+            val digits = strict.groupValues[2]
+            val suffix = strict.groupValues[3].take(2)
+            val plate = "$letters1 $digits $suffix"
+            return PlateCandidate(plate, 0, upper == plate, index)
+        }
+
+        normalizePlate(upper)?.let {
+            return PlateCandidate(it.first, it.second, upper == it.first, index)
+        }
+
+        strict?.let { m ->
+            val letters1 = m.groupValues[1]
+            val digits = m.groupValues[2]
+            val letterRun = m.groupValues[3]
+            val suffix = if (letterRun.length <= 3) letterRun else letterRun.take(2)
+            if (letters1.isEmpty() || digits.isEmpty() || suffix.isEmpty()) return null
+            val plate = "$letters1 $digits $suffix"
+            return PlateCandidate(plate, 0, upper == plate, index)
+        }
+        return null
+    }
+
+    private fun normalizePlate(upper: String): Pair<String, Int>? {
+        val match = LOOSE_PLATE.find(upper) ?: return null
+        val prefix = match.groupValues[1]
+        val middle = match.groupValues[2]
+        val suffix = match.groupValues[3]
+
+        var corrections = 0
+        val pfx = prefix.map { c -> DIGIT_TO_LETTER[c]?.also { corrections++ } ?: c }.joinToString("")
+        val mid = middle.mapNotNull { c ->
+            val d = OcrTypoDictionary.digitOf(c)
+            if (d != null && d != c) corrections++
+            d
+        }.joinToString("")
+        val sfx = suffix.map { c -> DIGIT_TO_LETTER[c]?.also { corrections++ } ?: c }.joinToString("")
+
+        if (pfx.length !in 1..2 || pfx.any { !it.isLetter() }) return null
+        if (mid.isEmpty() || mid.length > 4 || mid.any { !it.isDigit() }) return null
+        if (sfx.isEmpty() || sfx.length > 3 || sfx.any { !it.isLetter() }) return null
+
+        val plate = "$pfx $mid $sfx"
+        return plate.takeIf { PLATE_SHAPE.matches(it) }?.let { it to corrections }
     }
 
     private data class AddressParts(
@@ -251,16 +320,16 @@ object StnkOcrParser {
     private fun extractBerlakuSampai(lines: List<OcrLine>): String? {
         val labelLine = ParserSupport.findLabelLineIndex(
             lines,
-            listOf("BERLAKU SAMPAI", "BERLAKU S/D", "JATUH TEMPO", "BERLAKU"),
-            listOf("BERLAKU", "SAMPAI", "TEMPO")
+            listOf("BERLAKU SAMPAI", "BERLAKU S/D", "MASA BERLAKU", "JATUH TEMPO", "BERLAKU"),
+            listOf("BERLAKU", "SAMPAI", "TEMPO", "MASA")
         )
         if (labelLine >= 0) {
             val lineText = lines[labelLine].safeText
             val value = ParserSupport.valueAfterLabel(
                 lineText,
-                listOf("BERLAKU SAMPAI", "BERLAKU S/D", "JATUH TEMPO", "BERLAKU")
+                listOf("BERLAKU SAMPAI", "BERLAKU S/D", "MASA BERLAKU", "JATUH TEMPO", "BERLAKU")
             ) ?: ParserSupport.valueAfterFuzzyTokens(
-                lineText, listOf("BERLAKU", "SAMPAI", "TEMPO", "JATUH")
+                lineText, listOf("BERLAKU", "SAMPAI", "TEMPO", "JATUH", "MASA")
             ) ?: ParserSupport.rightNeighborValue(lines, lines[labelLine], ALL_TOKENS)
             DateParser.extractIso(value ?: lineText)?.let { return it }
         }
@@ -299,28 +368,52 @@ object StnkOcrParser {
     private fun isLabelToken(s: String): Boolean =
         ALL_TOKENS.any { ParserSupport.wordMatchesToken(s, it) }
 
+    private fun compact(raw: String): String = raw.uppercase().replace(Regex("""\s+"""), "")
+
     private fun splitBrand(raw: String?): String? {
         if (raw.isNullOrBlank()) return null
-        val up = TextNormalizer.uppercase(raw).replace(Regex("""\s+"""), "")
-        return BRANDS.firstOrNull { up.startsWith(it) } ?: raw.trim()
+        val up = compact(raw)
+        BRANDS.firstOrNull { up.startsWith(compact(it)) }?.let { return it }
+        val firstWord = raw.uppercase().split(Regex("""[^A-Z]+""")).firstOrNull { it.isNotEmpty() }
+        if (firstWord != null && firstWord.length >= 4) {
+            BRANDS.firstOrNull { ParserSupport.wordMatchesToken(firstWord, compact(it)) }?.let { return it }
+        }
+        return raw.trim()
     }
 
     private fun stripBrand(raw: String?): String? {
         if (raw.isNullOrBlank()) return null
-        val up = TextNormalizer.uppercase(raw).replace(Regex("""\s+"""), "")
+        val up = compact(raw)
         for (brand in BRANDS) {
-            if (up.startsWith(brand)) {
-                val rest = raw.substring(brand.length).trim()
+            val cb = compact(brand)
+            if (up.startsWith(cb)) {
+                val rest = raw.removePrefix(prefixInRaw(raw, cb)).trim()
                 return rest.takeIf { it.isNotEmpty() }
             }
         }
         return raw.trim()
     }
 
+    private fun prefixInRaw(raw: String, compactPrefix: String): String {
+        val sb = StringBuilder()
+        var nonSpace = 0
+        for (c in raw) {
+            if (nonSpace == compactPrefix.length) break
+            sb.append(c)
+            if (!c.isWhitespace()) nonSpace++
+        }
+        return sb.toString()
+    }
+
     private fun extractYear(raw: String?): String? {
         if (raw.isNullOrBlank()) return null
-        val match = Regex("""(?<!\d)(19[0-9]{2}|20[0-9]{2})(?!\d)""").find(raw) ?: return null
-        return match.value
+        val match = YEAR_PATTERN.find(raw) ?: return null
+        val digits = match.groupValues[1]
+            .mapNotNull { OcrTypoDictionary.digitOf(it) }
+            .joinToString("")
+        if (digits.length != 4) return null
+        val year = digits.toIntOrNull() ?: return null
+        return if (year in 1900..2100) year.toString() else null
     }
 
     private fun cutAtNextLabel(value: String, selfLabels: List<String>): String {
@@ -337,10 +430,14 @@ object StnkOcrParser {
 
     private fun cleanRangka(raw: String?): String? {
         if (raw.isNullOrBlank()) return null
-        return raw.uppercase()
+        var value = raw.uppercase()
             .replace(Regex("""\s+"""), "")
             .replace('O', '0')
-            .takeIf { it.length >= 5 }
+            .replace('Q', '0')
+        if (value.length == 17) {
+            value = value.replace('I', '1')
+        }
+        return value.takeIf { it.length >= 5 }
     }
 
     private fun cleanMesin(raw: String?): String? {
